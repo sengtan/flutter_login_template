@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../authentication/authenticator.dart';
 import '../authentication/authprovider.dart';
+import '../authentication/email_auth.dart';
 
 class LoginPage extends StatefulWidget {
   final VoidCallback onSignedIn;
@@ -11,6 +12,12 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+
+  void EmailButton() async {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => EmailLoginPage(onSignedIn: widget.onSignedIn,))
+    );
+  }
 
   void GoogleButton() async {
     final Authenticator auth = AuthProvider.of(context).auth;
@@ -35,6 +42,7 @@ class _LoginPageState extends State<LoginPage> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
+                    LogInOption(EmailButton,"assets/images/email_logo.png","Sign in with Email"),
                     LogInOption(GoogleButton,"assets/images/google_logo.png","Sign in with Google"),
                     LogInOption(FacebookButton,"assets/images/facebook_logo.png","Sign in with Facebook"),
                   ],
@@ -70,7 +78,7 @@ class LogInOption extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 new Image.asset(
-                    logoAsset, height: 50.0
+                    logoAsset, height: 50.0, width: 50.0, fit: BoxFit.contain,
                 ),
                 new Expanded(
                     child: Container(
