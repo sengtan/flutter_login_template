@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 
 final FirebaseAuth _auth = FirebaseAuth.instance;
+const bool verifyEmail = true;
 
 class EmailLoginPage extends StatefulWidget{
   final VoidCallback onSignedIn;
@@ -43,7 +46,6 @@ class _EmailLoginPageState extends State<EmailLoginPage>{
     else{
       //if returned list is empty, this means that the e-mail is not registered
       await _auth.fetchSignInMethodsForEmail(value).then((response){
-        print(response);
         response.isEmpty? errorText = "E-mail not registered":errorText = "";
       });
     }
@@ -90,18 +92,34 @@ class _EmailLoginPageState extends State<EmailLoginPage>{
     }).catchError((error){
       user = null;
     });
-
-    if (user != null) {
-      setState(() {
-        _success = true;
-        _userEmail = user.email;
-      });
-      widget.onSignedIn();
-      Navigator.of(context).pop();
-    } else {
-      setState(() {
-        _success = false;
-      });
+    
+    if(verifyEmail){
+      if (user != null && await checkEmailVerification(context)) {
+        setState(() {
+          _success = true;
+          _userEmail = user.email;
+        });
+        widget.onSignedIn();
+        Navigator.of(context).pop();
+      } else {
+        setState(() {
+          _success = false;
+        });
+      }
+    }
+    else{
+      if (user != null) {
+        setState(() {
+          _success = true;
+          _userEmail = user.email;
+        });
+        widget.onSignedIn();
+        Navigator.of(context).pop();
+      } else {
+        setState(() {
+          _success = false;
+        });
+      }
     }
   }
 
@@ -299,17 +317,33 @@ class _EmailRegisterPageState extends State<EmailRegisterPage> {
       user = null;
     });
 
-    if (user != null) {
-      setState(() {
-        _success = true;
-        _userEmail = user.email;
-      });
-      widget.onRegistered(_emailController.text,_passwordController.text);
-      Navigator.of(context).pop();
-    } else {
-      setState(() {
-        _success = true;
-      });
+    if(verifyEmail){
+      if (user != null && await checkEmailVerification(context)) {
+        setState(() {
+          _success = true;
+          _userEmail = user.email;
+        });
+        widget.onRegistered(_emailController.text,_passwordController.text);
+        Navigator.of(context).pop();
+      } else {
+        setState(() {
+          _success = false;
+        });
+      }
+    }
+    else{
+      if (user != null) {
+        setState(() {
+          _success = true;
+          _userEmail = user.email;
+        });
+        widget.onRegistered(_emailController.text,_passwordController.text);
+        Navigator.of(context).pop();
+      } else {
+        setState(() {
+          _success = false;
+        });
+      }
     }
   }
 
@@ -399,3 +433,125 @@ class _EmailRegisterPageState extends State<EmailRegisterPage> {
     );
   }
 }
+
+Future checkEmailVerification(BuildContext context) {
+  return showCupertinoDialog(
+    barrierDismissible: false,
+    context: context,
+    builder: (BuildContext context) {
+      return EmailVerification();
+    }
+  );
+}
+
+class EmailVerification extends StatefulWidget {
+  @override
+  _EmailVerificationState createState() => _EmailVerificationState();
+}
+
+class _EmailVerificationState extends State<EmailVerification> {
+  Timer _emailVerifierTimer;
+  Timer _resendTimer;
+  final _resendDuration = 60;
+  int _resendCountdown;
+  bool _resendReady = false;
+  String _userEmail;
+
+  Future checkIfEmailVerified() async {
+    _emailVerifierTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
+      await _auth.currentUser.reload();
+      if(_auth.currentUser.emailVerified){
+        Navigator.of(context).pop(true);
+      }
+    });
+  }
+
+  void sendEmailVerification() async {
+    await _auth.currentUser.reload();
+    if(!_auth.currentUser.emailVerified){
+      await _auth.currentUser.sendEmailVerification();
+      _resendCountdown = _resendDuration;
+      _resendTimer = new Timer.periodic(Duration(seconds: 1),(timer) async {
+        if(_resendCountdown == 0){
+          setState(() {
+            _resendTimer.cancel();
+            _resendReady = true;
+          });
+        }
+        else{
+          setState(() {
+            _resendCountdown -= 1;
+          });
+        }
+      });
+      setState(() {
+        _resendReady = false;
+      });
+    }
+    else{
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _userEmail = _auth.currentUser.email;
+    sendEmailVerification();
+    checkIfEmailVerified();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _emailVerifierTimer.cancel();
+    _resendTimer.cancel();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      content: Stack(
+        children: [
+          Positioned(
+              right: 0.0,
+              child: GestureDetector(
+                  onTap: (){
+                    Navigator.of(context).pop(false);
+                  },
+                  child: Align(
+                      alignment: Alignment.topRight,
+                      child: CircleAvatar(
+                        radius: 14.0,
+                        backgroundColor: Colors.white,
+                        child: Icon(Icons.close, color: Colors.grey),
+                      )
+                  )
+              )
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0.0,10.0,0.0,10.0),
+                child: Center(child:Text('Verifying your E-mail',style: TextStyle(fontSize: 24.0))),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0.0,10.0,0.0,10.0),
+                child: Center(child: Text("A verification link has been sent to $_userEmail", textAlign: TextAlign.center,)),
+              ),
+              RaisedButton(
+                onPressed: _resendReady?sendEmailVerification:null,
+                child: Text("Resend Verification")
+              ),
+              _resendReady?Text(""):Center(child: Text("You can resend in $_resendCountdown", style: TextStyle(fontSize:10.0, color: Colors.red)))
+            ],
+          ),
+        ]
+      )
+    );
+  }
+}
+
